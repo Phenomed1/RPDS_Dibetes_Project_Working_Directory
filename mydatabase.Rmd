@@ -1,0 +1,99 @@
+---
+title: "Newstuff"
+author: "Edmund Ampofo"
+date: "2024-11-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(DBI)
+library(RSQLite)
+library(dplyr)
+```
+
+```{r}
+
+di001 <- read.csv("Rpd.csv")
+
+counties <- select(di001, fips, county, state)
+
+write.csv(counties, "di002.csv")
+
+features <- select(di001, fips, year, diabetes, obesity)
+
+write.csv(features, "di003.csv")
+
+```
+
+```{r}
+# Create or connect to an SQLite database
+conn <- dbConnect(SQLite(), "health_data.db")
+
+
+```
+
+```{r}
+# Retain only unique rows based on fips
+counties <- counties[!duplicated(counties$fips), ]
+
+```
+
+```{r}
+# Create counties table with fips as the primary key
+dbExecute(conn, "
+  CREATE TABLE counties (
+    fips TEXT PRIMARY KEY,
+    county TEXT NOT NULL,
+    state TEXT NOT NULL
+  )
+")
+
+# Create features table with a composite primary key (fips, year)
+dbExecute(conn, "
+  CREATE TABLE features (
+    fips TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    diabetes REAL,
+    obesity REAL,
+    PRIMARY KEY (fips, year),
+    FOREIGN KEY (fips) REFERENCES counties(fips)
+  )
+")
+
+
+```
+```{r}
+# Populate counties table
+dbWriteTable(conn, "counties", counties, append = TRUE, row.names = FALSE)
+
+# Populate features table
+dbWriteTable(conn, "features", features, append = TRUE, row.names = FALSE)
+
+```
+
+```{r}
+# Check contents of counties table
+dbGetQuery(conn, "SELECT * FROM counties")
+
+# Check contents of features table
+dbGetQuery(conn, "SELECT * FROM features")
+
+```
+
+```{r}
+query <- "
+  SELECT features.fips, features.year, features.diabetes, features.obesity,
+         counties.county, counties.state
+  FROM features
+  JOIN counties ON features.fips = counties.fips
+"
+result <- dbGetQuery(conn, query)
+print(result)
+
+```
+```{r}
+dbDisconnect(conn)
+
+```
+
